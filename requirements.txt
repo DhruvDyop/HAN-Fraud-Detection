@@ -1,0 +1,9 @@
+streamlit
+pillow
+opencv-python
+pytesseract
+requests
+tldextract
+pandas
+scikit-learn
+pytest
