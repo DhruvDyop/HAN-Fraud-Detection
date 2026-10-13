@@ -1,9 +1,11 @@
+
 streamlit
-pillow
-opencv-python
+numpy
+pandas
+Pillow
+opencv-python-headless
 pytesseract
 requests
 tldextract
-pandas
 scikit-learn
 pytest
