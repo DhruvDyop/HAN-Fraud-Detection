@@ -22,8 +22,27 @@ def load_deepfake_frame_classifier(model_id: str = DEFAULT_VIDEO_FRAME_MODEL):
     return pipeline("image-classification", model=model_id)
 
 
-def _detect_largest_face(frame_rgb: np.ndarray, face_cascade: cv2.CascadeClassifier) -> tuple[Image.Image, bool]:
-    """Crop the largest detected face with padding, or return the full frame if none found."""
+def _load_face_cascade():
+    """Safely load OpenCV's Haar frontal-face cascade, returning None if unavailable."""
+    try:
+        cascade_cls = getattr(cv2, "CascadeClassifier", None)
+        cv2_data = getattr(cv2, "data", None)
+        if cascade_cls is None or cv2_data is None or not hasattr(cv2_data, "haarcascades"):
+            return None
+        cascade_path = os.path.join(cv2_data.haarcascades, "haarcascade_frontalface_default.xml")
+        if not os.path.exists(cascade_path):
+            return None
+        cascade = cascade_cls(cascade_path)
+        return None if cascade.empty() else cascade
+    except Exception:
+        return None
+
+
+def _detect_largest_face(frame_rgb: np.ndarray, face_cascade: Any) -> tuple[Image.Image, bool]:
+    """Crop the largest detected face with padding, or return the full frame if unavailable."""
+    if face_cascade is None:
+        return Image.fromarray(frame_rgb), False
+
     gray = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2GRAY)
     faces = face_cascade.detectMultiScale(gray, scaleFactor=1.15, minNeighbors=5, minSize=(48, 48))
 
@@ -89,7 +108,8 @@ def analyze_video_bytes(
     Analyze uploaded video bytes for deepfake manipulation.
 
     Uniformly samples `num_frames` frames, crops the primary face in each frame
-    via OpenCV Haar cascades, and aggregates per-frame deepfake probabilities.
+    when OpenCV Haar cascades are available (falling back to full frames otherwise),
+    and aggregates per-frame deepfake probabilities.
     """
     tmp_path = None
     try:
@@ -113,8 +133,7 @@ def analyze_video_bytes(
             "signals": ["No frames could be decoded from the uploaded video."],
         }
 
-    cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-    face_cascade = cv2.CascadeClassifier(cascade_path)
+    face_cascade = _load_face_cascade()
 
     frame_results: list[dict[str, Any]] = []
     faces_detected = 0
@@ -153,7 +172,9 @@ def analyze_video_bytes(
         f"Analyzed {len(frame_results)} sampled frames ({faces_detected} with detected faces).",
         f"Average fake probability: {avg_prob * 100:.1f}% | Peak frame: {peak_prob * 100:.1f}%.",
     ]
-    if faces_detected == 0:
+    if face_cascade is None:
+        signals.append("OpenCV Haar cascade unavailable in this environment; scored full frames instead.")
+    elif faces_detected == 0:
         signals.append("No frontal face detected; scored full frames instead.")
     if classifier is None:
         signals.append("Deepfake classifier not loaded; pass a cached pipeline to enable scoring.")
