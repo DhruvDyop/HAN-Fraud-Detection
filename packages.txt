@@ -1,0 +1,6 @@
+tesseract-ocr
+
+ffmpeg
+
+libsndfile1
+
